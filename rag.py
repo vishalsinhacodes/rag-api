@@ -3,6 +3,7 @@ import logging
 from fastapi import HTTPException
 from groq import Groq
 from sentence_transformers import SentenceTransformer
+from typing import Generator
 
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,39 @@ def ask(question: str) -> tuple[str, list[str]]:
     except Exception as e:
         logger.error(f"RAG ask failed: {e}")
         raise HTTPException(status_code=502, detail="LLM Service unavailable")
+    
+def ask_stream(question: str) -> Generator[str, None, None]:
+    try:
+        chunks = retrieve(question, n_results=2)
+        context = "\n".join(chunks)
+        
+        stream = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            max_tokens=256,
+            stream=True,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful assistant. Answer the user's question "
+                        "using only the context provided. If the answer is not in "
+                        "the context, say 'I don't have that information'."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Context:\n{context}\n\nQuestion: {question}"
+                }
+            ]
+        )
+        
+        for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token is not None:
+                yield token #type: ignore
+    except Exception as e:
+        logger.error(f"Streaming ask failed: {e}")
+        yield "Error: LLM service unavailable"    
     
 def ingest_documents(documents: list[str]) -> int:
     try:

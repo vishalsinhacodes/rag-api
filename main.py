@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from fastapi.responses import StreamingResponse
 
 from models import AskRequest, AskResponse, IngestRequest, IngestResponse
 
@@ -28,6 +29,13 @@ def health():
 def ask(request: AskRequest):
     answer, sources = rag.ask(request.question) # type: ignore
     return AskResponse(answer=answer, sources=sources)
+
+@app.post("/ask/stream")
+def ask_stream(request: AskRequest):
+    return StreamingResponse(
+        rag.ask_stream(request.question),
+        media_type="text/plain"
+    )
 
 @app.post("/ingest", response_model=IngestResponse)
 def ingest(request: IngestRequest):
