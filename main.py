@@ -27,8 +27,16 @@ def health():
     
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest):
-    answer, sources = rag.ask(request.question) # type: ignore
-    return AskResponse(answer=answer, sources=sources)
+    answer, sources, session_id = rag.ask(
+        request.question,
+        request.session_id
+    ) # type: ignore
+    
+    return AskResponse(
+        answer=answer,
+        sources=sources,
+        session_id=session_id
+    )
 
 @app.post("/ask/stream")
 def ask_stream(request: AskRequest):

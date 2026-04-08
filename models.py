@@ -1,4 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
+from typing import Optional
+import uuid
 
 class AskRequest(BaseModel):
     """Schema for a single RAG query."""
@@ -9,6 +11,7 @@ class AskRequest(BaseModel):
         min_length=1,
         max_length=500
     )
+    session_id: Optional[str] = None
     
     @field_validator("question")
     @classmethod
@@ -30,6 +33,7 @@ class AskResponse(BaseModel):
     """
     answer: str
     sources: list[str]
+    session_id: str
     
 class IngestRequest(BaseModel):
     """

@@ -1,9 +1,12 @@
 import chromadb
 import logging
+import uuid
+
 from fastapi import HTTPException
 from groq import Groq
 from sentence_transformers import SentenceTransformer
 from typing import Generator
+from typing import Optional
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +16,14 @@ chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection("docs")
 groq_client = Groq()
 
+SYSTEM_PROMPT = (
+    "You are a helpful assistant. Answer the user's question "
+    "using only the context provided. If the answer is not in "
+    "the context, say 'I don't have that information'."    
+)
+
+sessions: dict[str, list[dict]] = {}
+
 DOCUMENTS = [
     "FastAPI is a modern Python web framework for building APIs. It uses type hints for validation.",
     "ChromaDB is a vector database that stores embeddings and supports similarity search.",
@@ -21,6 +32,15 @@ DOCUMENTS = [
     "Docker is a platform for packing applications into containers for consistent deployment.",
     "PostgreSQL is a relational database. It supports ACID transcations and complex queries.",
 ]
+
+def get_or_create_session(session_id: Optional[str]) -> tuple[str, list[dict]]:
+    if not session_id or session_id not in sessions:
+        session_id = str(uuid.uuid4())
+        sessions[session_id] = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
+        
+    return session_id, sessions[session_id]
 
 def ingest():
     current_count = collection.count()
@@ -50,35 +70,28 @@ def retrieve(query: str, n_results: int = 2) -> list[str]:
     
     return []
 
-def ask(question: str) -> tuple[str, list[str]]:
+def ask(question: str, session_id: Optional[str] = None) -> tuple[str, list[str], str]:
     try:
+        session_id, history = get_or_create_session(session_id)
         chunks = retrieve(question, n_results=2)
     
         if not chunks:
-            return "I don't have any documents related to that question.", []
+            return "I don't have any documents related to that question.", [], ""
     
         context = "\n".join(chunks)
+        
+        user_message = f"Context:\n{context}\n\nQuestion: {question}"
+        history.append({"role": "user", "content": user_message})
     
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             max_tokens=256,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful assistant. Answer the user's question "
-                        "using only the context provided. If the answer is not in "
-                        "the context, say 'I don't have that information'."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": f"Context:\n{context}\n\nQuestion: {question}"
-                }
-            ]
+            messages=history    # type: ignore
         )
+        
         answer = response.choices[0].message.content or "No response generated."
-        return answer, chunks
+        return answer, chunks, session_id
+    
     except Exception as e:
         logger.error(f"RAG ask failed: {e}")
         raise HTTPException(status_code=502, detail="LLM Service unavailable")
