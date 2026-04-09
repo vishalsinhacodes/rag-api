@@ -1,6 +1,7 @@
 import chromadb
 import logging
 import uuid
+import hashlib
 
 from fastapi import HTTPException
 from groq import Groq
@@ -132,7 +133,8 @@ def ask_stream(question: str) -> Generator[str, None, None]:
 def ingest_documents(documents: list[str]) -> int:
     try:
         embeddings = embedding_model.encode(documents).tolist()
-        ids = [f"doc_{collection.count() + i}" for i in range(len(documents))]
+        # ids = [f"doc_{collection.count() + i}" for i in range(len(documents))]
+        ids = [hashlib.md5(doc.encode()).hexdigest()[:12] for doc in documents]
         collection.add(
             documents=documents,
             embeddings=embeddings,
