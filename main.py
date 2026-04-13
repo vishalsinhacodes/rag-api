@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse
@@ -20,14 +22,15 @@ app = FastAPI(
 )
 
 @app.get("/health")
-def health():
+async def health():
     return {
         "status": "ok"
     }
     
 @app.post("/ask", response_model=AskResponse)
-def ask(request: AskRequest):
-    answer, sources, session_id = rag.ask(
+async def ask(request: AskRequest):
+    answer, sources, session_id = await asyncio.to_thread(
+        rag.ask,
         request.question,
         request.session_id
     ) # type: ignore
@@ -39,15 +42,15 @@ def ask(request: AskRequest):
     )
 
 @app.post("/ask/stream")
-def ask_stream(request: AskRequest):
+async def ask_stream(request: AskRequest):
     return StreamingResponse(
         rag.ask_stream(request.question),
         media_type="text/plain"
     )
 
 @app.post("/ingest", response_model=IngestResponse)
-def ingest(request: IngestRequest):
-    count = rag.ingest_documents(request.documents)
+async def ingest(request: IngestRequest):
+    count = await asyncio.to_thread(rag.ingest_documents, request.documents)
     return IngestResponse(
         ingested=count,
         message=f"Successfully ingested {count} docuements"
